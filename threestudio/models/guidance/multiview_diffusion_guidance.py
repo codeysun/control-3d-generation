@@ -80,6 +80,15 @@ class MultiviewDiffusionGuidance(BaseModule):
         imgs = imgs * 2.0 - 1.0
         latents = self.model.get_first_stage_encoding(self.model.encode_first_stage(imgs))
         return latents  # [B, 4, 32, 32] Latent space image
+    
+    def decode_images(
+        self, latents: Float[Tensor, "B 4 32 32"]
+    ) -> Float[Tensor, "B 3 256 256"]:
+        imgs = self.model.decode_first_stage(latents)
+        imgs = torch.clamp((imgs + 1.0) / 2.0, min=0.0, max=1.0)
+        imgs = 255. * imgs.permute(0,2,3,1).cpu().numpy()
+
+        return list(imgs.astype(np.uint8))
 
     def forward(
         self,

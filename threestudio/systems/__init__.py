@@ -12,5 +12,6 @@ from . import (
     zero123,
     mvdream,
     mvdream_control,
+    mvdream_control_strict,
     imagedream,
 )

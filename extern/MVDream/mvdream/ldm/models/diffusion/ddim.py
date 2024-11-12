@@ -184,7 +184,9 @@ class DDIMSampler(object):
                 assert isinstance(unconditional_conditioning, dict)
                 c_in = dict()
                 for k in c:
-                    if isinstance(c[k], list):
+                    if k == 'control':
+                        c_in[k] = c[k]
+                    elif isinstance(c[k], list):
                         c_in[k] = [torch.cat([
                             unconditional_conditioning[k][i],
                             c[k][i]]) for i in range(len(c[k]))]

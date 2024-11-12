@@ -132,6 +132,15 @@ class MultiviewDiffusionGuidance(BaseModule):
         latents = self.get_first_stage_encoding(self.encode_first_stage(imgs))
         return latents  # [B, 4, 32, 32] Latent space image
 
+    def decode_images(
+        self, latents: Float[Tensor, "B 4 32 32"]
+    ) -> Float[Tensor, "B 3 256 256"]:
+        imgs = self.model.decode_first_stage(latents)
+        # imgs = torch.clamp((imgs + 1.0) / 2.0, min=0.0, max=1.0)
+        imgs = 255. * imgs.permute(0,2,3,1).cpu().numpy()
+
+        return list(imgs.astype(np.uint8))
+
     def normalize_img(self, img):
         img = (img*2 -1)
         return img
@@ -175,9 +184,20 @@ class MultiviewDiffusionGuidance(BaseModule):
                 # encode image into latents with vae, requires grad!
                 latents = self.encode_images(pred_rgb)
 
+        # TODO: calculate control signal
+        if "control" in kwargs:
+            control_rgb_BCHW = kwargs["control"]["comp_rgb"].permute(0, 3, 1, 2)
+            control_rgb = F.interpolate(control_rgb_BCHW, (self.cfg.image_size, self.cfg.image_size), mode='bilinear', align_corners=False)
+
+            # TODO: get effective region mask
+            control_mask = kwargs["control"]["mask"]
+        else:
+            control_rgb = pred_rgb
+
         detected_maps = []
-        for i in range(len(pred_rgb)):
-            img_load= to_pil_image(pred_rgb[i].detach().cpu())
+        for i in range(len(control_rgb)):
+            img_test = to_pil_image(pred_rgb[i].detach().cpu())
+            img_load= to_pil_image(control_rgb[i].detach().cpu())
             img_detect = np.array(img_load)  
             if self.cfg.input_mode == 'depth':
                 detected_map, _ = self.apply_detect(img_detect, 100,200) # MiDas Depth
@@ -215,6 +235,7 @@ class MultiviewDiffusionGuidance(BaseModule):
                 context = {"context": text_embeddings}
 
             # Apply input conditions            
+            # TODO: Experiment with CFG
             if not self.cfg.change_condition: 
                 context["control"] = torch.cat([input_cond] * 2)
             else:
@@ -222,10 +243,14 @@ class MultiviewDiffusionGuidance(BaseModule):
                     context["control"] = torch.cat([input_cond] * 2)
                 else:
                     context["control"] = None
+
+            # Effective region mask
+            context["effective_region_mask"] = control_mask
                      
             noise_pred = self.model.apply_model(latent_model_input, t_expand, context)    
             
         # perform guidance
+        # TODO: perform CFG with depth controls
         noise_pred_text, noise_pred_uncond = noise_pred.chunk(2) # Note: flipped compared to stable-dreamfusion
         noise_pred = noise_pred_uncond + self.cfg.guidance_scale * (noise_pred_text - noise_pred_uncond)
 

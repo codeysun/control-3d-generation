@@ -366,6 +366,17 @@ class ControlLDM(LatentDiffusion):
         control = control.to(memory_format=torch.contiguous_format).float()
         return x, dict(c_crossattn=[c], c_concat=[control])
 
+    def apply_effective_region_mask(self, effective_region_mask, out):
+        if effective_region_mask is None:
+            return out
+
+        B, C, H, W = out.shape
+        mask = torch.nn.functional.interpolate(
+            effective_region_mask.to(out.device),
+            size=(H, W),
+            mode="bilinear",
+        )
+        return out * mask
     
     def apply_model(self, x_noisy, t, cond, *args, **kwargs):
         assert isinstance(cond, dict)
@@ -374,6 +385,9 @@ class ControlLDM(LatentDiffusion):
         if cond['control'] is not None: #  in cond.keys():
             control = self.control_model(x=x_noisy, hint=cond['control'], camera=cond['camera'], timesteps=t, context=cond['context'])
             control = [c * scale for c, scale in zip(control, self.control_scales)]
+
+            # Apply effective region mask
+            control = [self.apply_effective_region_mask(cond['effective_region_mask'], c) for c in control]
         else:
             control = None
         eps = diffusion_model(x=x_noisy, timesteps=t, context=cond['context'], control=control, camera=cond['camera'], only_mid_control=False)
