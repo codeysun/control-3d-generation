@@ -8,6 +8,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+import cv2
+import kornia
 
 from omegaconf import OmegaConf
 from mvdream.camera_utils import convert_opengl_to_blender, normalize_camera, get_camera
@@ -145,6 +147,33 @@ class MultiviewDiffusionGuidance(BaseModule):
         img = (img*2 -1)
         return img
 
+    def dilate_and_feather_mask(self, mask):
+        B, C, H, W = mask.shape
+
+        # Kernel sizes are found empirically on 64x64 image
+        # Make kernel size scale with image dimensions
+        scale = H / 64
+
+        # New kernel sizes
+        dilation_kernel_size = int(np.ceil(1 * scale))
+        blur_kernel_size = int(np.ceil(5 * scale))
+
+        # Ensure that kernel sizes are odd numbers (as required by many functions)
+        if dilation_kernel_size % 2 == 0:
+            dilation_kernel_size += 1
+        if blur_kernel_size % 2 == 0:
+            blur_kernel_size += 1
+
+
+        dilation_kernel = torch.ones(dilation_kernel_size, dilation_kernel_size).to(mask)
+    
+        dilated_mask = kornia.morphology.dilation(mask, dilation_kernel)
+
+        # feather_kernel_size = (blur_kernel_size, blur_kernel_size)
+        # feathered_mask = cv2.GaussianBlur(dilated_mask, feather_kernel_size, 1.0)
+
+        # return feathered_mask
+        return dilated_mask
 
     def forward(
         self,
@@ -184,19 +213,23 @@ class MultiviewDiffusionGuidance(BaseModule):
                 # encode image into latents with vae, requires grad!
                 latents = self.encode_images(pred_rgb)
 
-        # TODO: calculate control signal
+        # Calculate control signal
         if "control" in kwargs:
             control_rgb_BCHW = kwargs["control"]["comp_rgb"].permute(0, 3, 1, 2)
             control_rgb = F.interpolate(control_rgb_BCHW, (self.cfg.image_size, self.cfg.image_size), mode='bilinear', align_corners=False)
 
-            # TODO: get effective region mask
-            control_mask = kwargs["control"]["mask"]
+            # Get effective region mask
+            control_mask: Float[Tensor, "B 1 H W"] = kwargs["control"]["mask"].permute(0, 3, 1, 2)
+            # Dilate the control masks
+            control_mask = self.dilate_and_feather_mask(control_mask)
         else:
             control_rgb = pred_rgb
+            control_mask = None
 
         detected_maps = []
         for i in range(len(control_rgb)):
             img_test = to_pil_image(pred_rgb[i].detach().cpu())
+            mask_test = to_pil_image(control_mask[i].detach().cpu())
             img_load= to_pil_image(control_rgb[i].detach().cpu())
             img_detect = np.array(img_load)  
             if self.cfg.input_mode == 'depth':
@@ -205,9 +238,15 @@ class MultiviewDiffusionGuidance(BaseModule):
                 detected_map = self.apply_canny(img_detect, 100,200) # canny edge
             elif self.cfg.input_mode == 'normal':
                 _, detected_map = self.apply_detect(img_detect, bg_th=0.4) # MiDas Normal
-            detected_map = torch.from_numpy(HWC3(detected_map).copy()).permute(2,0,1).float().cuda() / 255.0
+            detected_map = torch.from_numpy(HWC3(detected_map).copy()).float().cuda() / 255.0
+            # detected_map = detected_map * (kwargs["control"]["depth"][i] > 0) # mask the depth map
+            detected_map = detected_map.permute(2,0,1)
+
             detected_maps.append(detected_map)
         input_cond = torch.stack(detected_maps)
+
+        # Resize depth image to match pred_rgb
+        input_cond = F.interpolate(input_cond, (pred_rgb.shape[2], pred_rgb.shape[3]), mode='bilinear', align_corners=False)
         # input_cond = depth.repeat(1,1,1,3).float().cuda() 
         
         # sample timestep
@@ -245,7 +284,11 @@ class MultiviewDiffusionGuidance(BaseModule):
                     context["control"] = None
 
             # Effective region mask
-            context["effective_region_mask"] = control_mask
+            if control_mask is not None:
+                context["effective_region_mask"] = torch.cat([control_mask] * 2)
+            else:
+                context["effective_region_mask"] = None
+
                      
             noise_pred = self.model.apply_model(latent_model_input, t_expand, context)    
             

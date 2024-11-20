@@ -6,4 +6,6 @@ from . import (
     neus_volume_renderer,
     nvdiff_rasterizer,
     patch_renderer,
+    pyrender_rasterizer,
+    nvdiff_obj_rasterizer,
 )

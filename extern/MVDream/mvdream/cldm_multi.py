@@ -331,7 +331,7 @@ class ControlLDM(LatentDiffusion):
         self.control_model = instantiate_from_config(control_stage_config)
         self.control_key = control_key
         self.only_mid_control = only_mid_control
-        self.control_scales = [1.0] * 13
+        self.control_scales = [2.0] * 13
 
 
     def return_devide(self, image, num_frames=4):

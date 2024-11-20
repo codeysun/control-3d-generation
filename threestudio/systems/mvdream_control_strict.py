@@ -15,6 +15,8 @@ class MVDreamSystem(BaseLift3DSystem):
     class Config(BaseLift3DSystem.Config): 
         visualize_samples: bool = False
         refinement: bool = False
+        control_renderer_type: str = ""
+        control_renderer: dict = field(default_factory=dict)
 
     cfg: Config
 
@@ -28,51 +30,50 @@ class MVDreamSystem(BaseLift3DSystem):
         )
         self.prompt_utils = self.prompt_processor()
 
-        # Load control geometry
-        threestudio.info("Initializing control geometry from a given checkpoint ...")
-        from threestudio.utils.config import load_config, parse_structured
+        # # Load control geometry
+        # threestudio.info("Initializing control geometry from a given checkpoint ...")
+        # from threestudio.utils.config import load_config, parse_structured
 
-        prev_cfg = load_config(
-            os.path.join(
-                os.path.dirname(self.cfg.geometry_convert_from),
-                "../configs/parsed.yaml",
-            )
-        )  # hard-coded relative path
-        prev_system_cfg: BaseLift3DSystem.Config = parse_structured(
-            self.Config, prev_cfg.system
-        )
+        # prev_cfg = load_config(
+        #     os.path.join(
+        #         os.path.dirname(self.cfg.geometry_convert_from),
+        #         "../configs/parsed.yaml",
+        #     )
+        # )  # hard-coded relative path
+        # prev_system_cfg: BaseLift3DSystem.Config = parse_structured(
+        #     self.Config, prev_cfg.system
+        # )
 
-        prev_geometry_cfg = prev_system_cfg.geometry
-        prev_geometry_cfg.update(self.cfg.geometry_convert_override)
-        prev_geometry = threestudio.find(prev_system_cfg.geometry_type)(
-            prev_geometry_cfg
-        )
-        state_dict, epoch, global_step = load_module_weights(
-            self.cfg.geometry_convert_from,
-            module_name="geometry",
-            map_location="cpu",
-        )
-        prev_geometry.load_state_dict(state_dict, strict=False)
-        # restore step-dependent states
-        prev_geometry.do_update_step(epoch, global_step, on_load_weights=True)
-        # convert from coarse stage geometry
-        prev_geometry = prev_geometry.to(get_device())
-        self.control_geometry = threestudio.find(self.cfg.geometry_type).create_from(
-            prev_geometry,
-            self.cfg.geometry,
-            copy_net=True,
-        )
-        del prev_geometry
-        cleanup()
-        self.control_geometry.eval()
+        # prev_geometry_cfg = prev_system_cfg.geometry
+        # prev_geometry_cfg.update(self.cfg.geometry_convert_override)
+        # prev_geometry = threestudio.find(prev_system_cfg.geometry_type)(
+        #     prev_geometry_cfg
+        # )
+        # state_dict, epoch, global_step = load_module_weights(
+        #     self.cfg.geometry_convert_from,
+        #     module_name="geometry",
+        #     map_location="cpu",
+        # )
+        # prev_geometry.load_state_dict(state_dict, strict=False)
+        # # restore step-dependent states
+        # prev_geometry.do_update_step(epoch, global_step, on_load_weights=True)
+        # # convert from coarse stage geometry
+        # prev_geometry = prev_geometry.to(get_device())
+        # self.control_geometry = threestudio.find(self.cfg.geometry_type).create_from(
+        #     prev_geometry,
+        #     self.cfg.geometry,
+        #     copy_net=True,
+        # )
+        # del prev_geometry
+        # cleanup()
+        # self.control_geometry.eval()
 
-        self.control_renderer = threestudio.find(self.cfg.renderer_type)(
-            self.cfg.renderer,
-            geometry=self.control_geometry,
-            material=self.material,
-            background=self.background,
-        )
-        # self.control_renderer.eval()
+        # self.control_renderer = threestudio.find(self.cfg.renderer_type)(
+        #     self.cfg.renderer,
+        #     geometry=self.control_geometry,
+        #     material=self.material,
+        #     background=self.background,
+        # )
 
         # TODO: remove. this is loading half mask
         from PIL import Image
@@ -81,7 +82,13 @@ class MVDreamSystem(BaseLift3DSystem):
         image = Image.open(image_path).convert('L')
         image = image.resize((256, 256))
         image = pil_to_tensor(image) / 255.0
-        self.control_mask = image.unsqueeze(0)
+        self.half_mask = image.unsqueeze(0).permute(0, 2, 3, 1)
+
+
+        # Load control geometry and renderer
+        self.control_renderer = threestudio.find(self.cfg.control_renderer_type)(
+            self.cfg.control_renderer,
+        )
 
     def on_load_checkpoint(self, checkpoint):
         for k in list(checkpoint['state_dict'].keys()):
@@ -102,16 +109,15 @@ class MVDreamSystem(BaseLift3DSystem):
         out = self.renderer(**batch)
         with torch.no_grad():
             out_control = self.control_renderer(**batch)
-            #TODO: get effective region mask
-            out_control["mask"] = self.control_mask
+            # Get effective region mask
+            if "mask" not in out_control:
+                out_control["mask"] = self.half_mask
         return out, out_control
 
     def training_step(self, batch, batch_idx):
         out, control = self(batch)
         batch['idx'] = batch_idx
 
-        # TODO: pass control signal to guidance
-        # TODO: pass effective region mask to guidance
         guidance_out = self.guidance(
             out["comp_rgb"], self.prompt_utils, control=control, **batch
         )
@@ -207,6 +213,24 @@ class MVDreamSystem(BaseLift3DSystem):
                     "img": out["opacity"][0, :, :, 0],
                     "kwargs": {"cmap": None, "data_range": (0, 1)},
                 },
+            ]
+            + (
+                [
+                    {
+                        "type": "rgb",
+                        "img": control["comp_rgb"][0],
+                        "kwargs": {"data_format": "HWC", "data_range": (0, 1)},
+                    }
+                ]
+                if "comp_rgb" in control
+                else []
+            )
+            + [
+                {
+                    "type": "grayscale",
+                    "img": control["mask"][0, :, :, 0],
+                    "kwargs": {"cmap": None, "data_range": (0, 1)},
+                },
             ],
             name="validation_step",
             step=self.true_global_step,
@@ -245,6 +269,24 @@ class MVDreamSystem(BaseLift3DSystem):
                 {
                     "type": "grayscale",
                     "img": out["opacity"][0, :, :, 0],
+                    "kwargs": {"cmap": None, "data_range": (0, 1)},
+                },
+            ]
+            + (
+                [
+                    {
+                        "type": "rgb",
+                        "img": control["comp_rgb"][0],
+                        "kwargs": {"data_format": "HWC", "data_range": (0, 1)},
+                    }
+                ]
+                if "comp_rgb" in control
+                else []
+            )
+            + [
+                {
+                    "type": "grayscale",
+                    "img": control["mask"][0, :, :, 0],
                     "kwargs": {"cmap": None, "data_range": (0, 1)},
                 },
             ],

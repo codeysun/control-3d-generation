@@ -426,6 +426,7 @@ class RandomCameraDataset(Dataset):
         self.elevation, self.azimuth = elevation, azimuth
         self.elevation_deg, self.azimuth_deg = elevation_deg, azimuth_deg
         self.camera_distances = camera_distances
+        self.fovy_deg = fovy_deg
 
     def __len__(self):
         return self.n_views
@@ -444,6 +445,7 @@ class RandomCameraDataset(Dataset):
             "camera_distances": self.camera_distances[index],
             "height": self.cfg.eval_height,
             "width": self.cfg.eval_width,
+            "fovy": self.fovy_deg[index],
         }
 
     def collate(self, batch):

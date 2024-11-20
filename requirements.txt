@@ -42,3 +42,6 @@ controlnet_aux
 
 # imagedream
 open-clip-torch==2.7.0
+
+#pyrender
+pyrender
