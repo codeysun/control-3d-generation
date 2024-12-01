@@ -10,7 +10,7 @@ data:
   # 0-4999: 64x64, >=5000: 256x256
   width: [64, 256]
   height: [64, 256]
-  resolution_milestones: [5000]
+  resolution_milestones: [10000]
   camera_distance_range: [0.8, 1.0] # relative
   fovy_range: [15, 60]
   elevation_range: [0, 30]
@@ -23,18 +23,19 @@ data:
 
 system_type: "mvdream-strict-control-system"
 system:
-  control_renderer_type: "pyrender-rasterizer"
+  # control_renderer_type: "pyrender-rasterizer"
+  control_renderer_type: "nvdiff-obj-rasterizer"
   control_renderer:
-    # file_path: "/home/codeysun/git/data/PartNet/data_v0/8677/objs"
-    # masked_segments: ["original-3.obj"]
+    file_path: "/home/codeysun/git/data/PartNet/data_v0/8677/objs"
+    masked_segments: ["original-3.obj"]
     # file_path: "/home/codeysun/git/data/PartNet/data_v0/14102/objs"
     # masked_segments: ["new-0.obj", "new-1.obj"]
-    file_path: "/home/codeysun/git/data/PartNet/data_v0/555/objs"
-    masked_segments: ["new-4.obj"]
+    # file_path: "/home/codeysun/git/data/PartNet/data_v0/555/objs"
+    # masked_segments: ["new-4.obj", "new-0.obj","new-1.obj","new-2.obj","new-3.obj",]
 
   refinement: false
   # geometry_convert_from: ???
-  # geometry_convert_inherit_texture: true
+  geometry_convert_inherit_texture: true
   geometry_type: "implicit-volume"
   geometry:
     radius: 1.0

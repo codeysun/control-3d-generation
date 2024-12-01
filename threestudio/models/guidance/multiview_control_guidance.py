@@ -230,6 +230,8 @@ class MultiviewDiffusionGuidance(BaseModule):
         for i in range(len(control_rgb)):
             img_test = to_pil_image(pred_rgb[i].detach().cpu())
             mask_test = to_pil_image(control_mask[i].detach().cpu())
+            # normal_test = to_pil_image(kwargs["control"]["comp_normal"].permute(0, 3, 1, 2)[i])
+            depth_test = to_pil_image(kwargs["control"]["depth"].permute(0, 3, 1, 2)[i])
             img_load= to_pil_image(control_rgb[i].detach().cpu())
             img_detect = np.array(img_load)  
             if self.cfg.input_mode == 'depth':

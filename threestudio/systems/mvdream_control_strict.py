@@ -88,6 +88,9 @@ class MVDreamSystem(BaseLift3DSystem):
         # Load control geometry and renderer
         self.control_renderer = threestudio.find(self.cfg.control_renderer_type)(
             self.cfg.control_renderer,
+            geometry=self.geometry,
+            material=self.material,
+            background=self.background,
         )
 
     def on_load_checkpoint(self, checkpoint):
@@ -210,7 +213,7 @@ class MVDreamSystem(BaseLift3DSystem):
             + [
                 {
                     "type": "grayscale",
-                    "img": out["opacity"][0, :, :, 0],
+                    "img": out["depth"][0, :, :, 0],
                     "kwargs": {"cmap": None, "data_range": (0, 1)},
                 },
             ]
@@ -268,7 +271,7 @@ class MVDreamSystem(BaseLift3DSystem):
             + [
                 {
                     "type": "grayscale",
-                    "img": out["opacity"][0, :, :, 0],
+                    "img": out["depth"][0, :, :, 0],
                     "kwargs": {"cmap": None, "data_range": (0, 1)},
                 },
             ]
