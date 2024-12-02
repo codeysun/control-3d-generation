@@ -39,9 +39,11 @@ class NVDiffObjRasterizer(Rasterizer):
         self.ctx = NVDiffRasterizerContext(self.cfg.context_type, get_device())
 
         obj_meshes = []
+        control_meshes = []
         self.seg_node_map = {}
         for file in os.listdir(self.cfg.file_path):
             if file.endswith('.obj'):
+            # if file in self.cfg.masked_segments:
                 obj_file_path = os.path.join(self.cfg.file_path, file)
                 mesh = trimesh.load(obj_file_path)
                 if mesh.is_empty:
@@ -51,12 +53,15 @@ class NVDiffObjRasterizer(Rasterizer):
 
                 if file in self.cfg.masked_segments:
                     color = [255, 255, 255, 255]
+                    control_meshes.append(mesh)
                 else:
                     color = [100, 100, 100, 255]
+                    # color = [0, 0, 0, 255]
                 v_colors = np.array([color] * mesh.vertices.shape[0])
                 mesh.visual.vertex_colors = v_colors
         
         self.trimesh = trimesh.util.concatenate(obj_meshes)
+        self.control_trimesh = trimesh.util.concatenate(control_meshes)
 
         # Set object pose to align with MVDream
         obj_pose = np.array([
@@ -66,6 +71,7 @@ class NVDiffObjRasterizer(Rasterizer):
             [0, 0, 0, 1]
         ])
         self.trimesh = self.trimesh.apply_transform(obj_pose)
+        self.control_trimesh = self.control_trimesh.apply_transform(obj_pose)
 
         v_pos, t_pos_idx, face_nrm, v_colors = (
             torch.from_numpy(self.trimesh.vertices).float().to("cuda"),
@@ -107,7 +113,7 @@ class NVDiffObjRasterizer(Rasterizer):
         out = {"opacity": mask_aa, "mesh": mesh}
 
         gb_normal = torch.zeros(batch_size, height, width, 3).to(rast)
-        gb_normal[mask.squeeze()] = self.f_nrm[rast[mask.squeeze()][:, 3].int() - 1]
+        gb_normal[mask.squeeze(dim=3)] = self.f_nrm[rast[mask.squeeze(dim=3)][:, 3].int() - 1]
         out.update({"comp_normal": gb_normal})  # in [0, 1]
 
         if render_rgb:
@@ -148,3 +154,7 @@ class NVDiffObjRasterizer(Rasterizer):
                         "mask": control_mask_aa[..., 0].unsqueeze(-1), "depth": rast[..., 2].unsqueeze(-1)})
 
         return out
+
+    @property
+    def control_mesh(self):
+        return self.control_trimesh

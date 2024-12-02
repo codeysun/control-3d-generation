@@ -5,9 +5,14 @@ import torch
 
 import threestudio
 from threestudio.systems.base import BaseLift3DSystem
+from threestudio.models.exporters.base import ExporterOutput
 from threestudio.utils.misc import cleanup, get_device, load_module_weights
 from threestudio.utils.ops import binary_cross_entropy, dot
 from threestudio.utils.typing import *
+from threestudio.utils.eval import compute_chamfer_distance, compute_volumetric_iou
+
+import trimesh
+import numpy as np
 
 @threestudio.register("mvdream-strict-control-system")
 class MVDreamSystem(BaseLift3DSystem):
@@ -307,3 +312,41 @@ class MVDreamSystem(BaseLift3DSystem):
             name="test",
             step=self.true_global_step,
         )
+
+    def on_predict_epoch_end(self) -> None:
+        if self.exporter.cfg.save_video:
+            self.on_test_epoch_end()
+        exporter_output: List[ExporterOutput] = self.exporter()
+        for out in exporter_output:
+            save_func_name = f"save_{out.save_type}"
+            if not hasattr(self, save_func_name):
+                raise ValueError(f"{save_func_name} not supported by the SaverMixin")
+            save_func = getattr(self, save_func_name)
+            save_func(f"it{self.true_global_step}-export/{out.save_name}", **out.params)
+        if self.exporter.cfg.eval:
+            control_mesh = self.control_renderer.control_mesh
+
+            gen_mesh = exporter_output[0].params["mesh"]
+            gen_mesh = trimesh.Trimesh(
+                vertices=gen_mesh.v_pos.detach().cpu().numpy(),
+                faces=gen_mesh.t_pos_idx.detach().cpu().numpy(),
+            )
+
+            gt_to_gen_chamfer, gen_to_gt_chamfer = compute_chamfer_distance(control_mesh, gen_mesh)
+
+            volumetric_iou = compute_volumetric_iou(gen_mesh, control_mesh)
+
+            print("Evaluation Metrics:")
+            print(f"GT to gen chamfer distance: {gt_to_gen_chamfer}")
+            print(f"Gen to GT chamfer distance: {gen_to_gt_chamfer}")
+            print(f"Volumetric IoU: {volumetric_iou}")
+
+            data = {"gt_to_gen_chamfer": np.array(gt_to_gen_chamfer),
+                    "gen_to_gt_chamfer": np.array(gen_to_gt_chamfer),
+                    "volumetric_iou": np.array(volumetric_iou)}
+
+            self.save_data(
+                f"eval",
+                data
+            )
+    

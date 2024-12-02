@@ -15,6 +15,13 @@ This part is the same as original [MVDream-threestudio](https://github.com/byted
 
 
 ### Install ControlDreamer
+
+Install additional dependency:
+```sh
+cd threestudio/util/lib_shape_prior
+python setup.py build_ext --inplace
+```
+
 ControlDreamer using multi-view ControlNet is provided in a different codebase. Install it by:
 ```sh
 export PYTHONPATH=$PYTHONPATH:./extern/MVDream

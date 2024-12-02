@@ -28,6 +28,7 @@ class MeshExporter(Exporter):
         xatlas_chart_options: dict = field(default_factory=dict)
         xatlas_pack_options: dict = field(default_factory=dict)
         context_type: str = "gl"
+        eval: bool = False
 
     cfg: Config
 
