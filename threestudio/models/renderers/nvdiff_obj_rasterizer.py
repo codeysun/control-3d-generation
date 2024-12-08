@@ -36,7 +36,9 @@ class NVDiffObjRasterizer(Rasterizer):
         background: BaseBackground,
     ) -> None:
         super().configure(geometry, material, background)
-        self.ctx = NVDiffRasterizerContext(self.cfg.context_type, get_device())
+
+        device = get_device()
+        self.ctx = NVDiffRasterizerContext(self.cfg.context_type, device)
 
         obj_meshes = []
         control_meshes = []
@@ -74,18 +76,18 @@ class NVDiffObjRasterizer(Rasterizer):
         self.control_trimesh = self.control_trimesh.apply_transform(obj_pose)
 
         v_pos, t_pos_idx, face_nrm, v_colors = (
-            torch.from_numpy(self.trimesh.vertices).float().to("cuda"),
-            torch.from_numpy(self.trimesh.faces).long().to("cuda"),
-            torch.from_numpy(self.trimesh.face_normals).float().to("cuda"),
-            torch.from_numpy(self.trimesh.visual.vertex_colors).int().to("cuda"),
+            torch.from_numpy(self.trimesh.vertices).float().to(device),
+            torch.from_numpy(self.trimesh.faces).long().to(device),
+            torch.from_numpy(self.trimesh.face_normals).float().to(device),
+            torch.from_numpy(self.trimesh.visual.vertex_colors).int().to(device),
         )  # transform back to torch tensor on CUDA
         self.mesh = Mesh(v_pos=v_pos, t_pos_idx=t_pos_idx)
         self.f_nrm = face_nrm
         self.v_colors = v_colors[:, :3].float() / 255.0
 
         # Material options
-        self.ambient_light_color = torch.tensor([0.1, 0.1, 0.1], dtype=torch.float32).to("cuda")
-        self.diffuse_light_color = torch.tensor([0.8, 0.3, 0.3], dtype=torch.float32).to("cuda")
+        self.ambient_light_color = torch.tensor([0.1, 0.1, 0.1], dtype=torch.float32).to(device)
+        self.diffuse_light_color = torch.tensor([0.8, 0.3, 0.3], dtype=torch.float32).to(device)
 
     def forward(
         self,
