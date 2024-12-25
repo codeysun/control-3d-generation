@@ -1,14 +1,16 @@
-# ControlDreamer: Stylized 3D Generation with Multi-View ControlNet
-Venue: BMVC 2024
+# Locally Controlled 3D Generation
+Final Project for CS468.
 
-Authors: Yeongtak Oh*, Jooyoung Choi*, Yongsung Kim, Minjun Park, Chaehun Shin, Sungroh Yoon
-(* denotes equal contribution)
+[Slides](https://docs.google.com/presentation/d/1myU7y-pp23LhgC_WUwzfndJdyFfPOIKOnqyVpwOtskk/edit?usp=sharing) | [Paper](https://www.overleaf.com/read/bmtjsptvfgfh#4576ba)
 
-[Project Page](https://controldreamer.github.io/) | [Paper](https://arxiv.org/abs/2312.01129) | [Demo]()
+Generate 3D assets (left) with locally controlled geometry (right).
 
 <p align="center">
-    <img src = "https://github.com/user-attachments/assets/607a1071-59dc-4cea-a704-f6e1bac8325b" width="80%">
+    <img src = "https://github.com/user-attachments/assets/763f685a-528a-47d4-ab9f-2ceb52f12afd" width="80%">
+    <img src = "https://github.com/user-attachments/assets/62e69579-3af4-4417-a3ba-4d7a0ba29f7f" width="80%">
+    <img src = "https://github.com/user-attachments/assets/65bdf75d-e05c-40d8-be36-6681dcf1b01c" width="80%">
 </p>
+
 
 ## Installation 
 This part is the same as original [MVDream-threestudio](https://github.com/bytedance/MVDream-threestudio). Skip it if you already have installed the environment.
